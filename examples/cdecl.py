@@ -83,9 +83,9 @@ def _explain_type(decl):
     elif typ == c_ast.ArrayDecl:
         arr = 'array'
         if decl.dim: arr += '[%s]' % decl.dim.value
-        
         return arr + " of " + _explain_type(decl.type)
-        
+    elif typ == c_ast.Struct:
+        return 'struct '+ decl.name
     elif typ == c_ast.FuncDecl:
         if decl.args:
             params = [_explain_type(param) for param in decl.args.params]

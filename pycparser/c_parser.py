@@ -23,7 +23,9 @@ class CParser(PLYParser):
             lextab='pycparser.lextab',
             yacc_optimize=True,
             yacctab='pycparser.yacctab',
-            yacc_debug=False):
+            yacc_debug=False,
+            keep_comment=False,
+    ):
         """ Create a new CParser.
 
             Some arguments for controlling the debug/optimization
@@ -64,10 +66,16 @@ class CParser(PLYParser):
             yacc_debug:
                 Generate a parser.out file that explains how yacc
                 built the parsing table from the grammar.
+
+            keep_comment:
+                Boolean passed on to CLexer.
+                See there on how to use this.
         """
         self.clex = CLexer(
             error_func=self._lex_error_func,
-            type_lookup_func=self._lex_type_lookup_func)
+            type_lookup_func=self._lex_type_lookup_func,
+            keep_comment= keep_comment,
+        )
 
         self.clex.build(
             optimize=lex_optimize,
@@ -471,8 +479,13 @@ class CParser(PLYParser):
                         coord = t.coord
                         break
 
-                self._parse_error('Multiple type specifiers with a type tag',
-                        coord)
+                self._parse_error(
+                    'Multiple type specifiers with a type tag', coord)
+            else:
+                if hasattr(ty[0], 'coord'):
+                    coord = ty[0].coord
+                else:
+                    coord = '?'
 
             decl = c_ast.Decl(
                 name=None,
@@ -482,7 +495,7 @@ class CParser(PLYParser):
                 type=ty[0],
                 init=None,
                 bitsize=None,
-                coord=ty[0].coord)
+                coord=coord)
             decls = [decl]
         else:
             for decl, init in p[2] or []:

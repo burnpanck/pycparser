@@ -82,13 +82,17 @@ def parse_file(filename, use_cpp=False, cpp_path='cpp', cpp_args='',
 
         Errors from cpp will be printed out. 
     """
+    keep_comment= False
     if use_cpp:
+        if '-C' in cpp_args:
+            keep_comment= True
         text = preprocess_file(filename, cpp_path, cpp_args)
     else:
         with open(filename, 'rU') as f:
             text = f.read()
 
     if parser is None:
-        parser = CParser()
-    return parser.parse(text, filename)
-
+        parser = CParser(keep_comment=keep_comment)
+    ast= parser.parse(text, filename)
+    setattr(ast, 'commentDir', parser.clex.commentDir)
+    return ast
