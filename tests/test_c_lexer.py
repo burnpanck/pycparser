@@ -22,6 +22,12 @@ class TestCLexerNoErrors(unittest.TestCase):
     def error_func(self, msg, line, column):
         self.fail(msg)
 
+    def on_lbrace_func(self):
+        pass
+
+    def on_rbrace_func(self):
+        pass
+
     def type_lookup_func(self, typ):
         if typ.startswith('mytype'):
             return True
@@ -29,7 +35,8 @@ class TestCLexerNoErrors(unittest.TestCase):
             return False
 
     def setUp(self):
-        self.clex = CLexer(self.error_func, self.type_lookup_func)
+        self.clex = CLexer(self.error_func, lambda: None, lambda: None,
+                           self.type_lookup_func)
         self.clex.build(optimize=False)
 
     def assertTokensTypes(self, str, types):
@@ -44,6 +51,7 @@ class TestCLexerNoErrors(unittest.TestCase):
         self.assertTokensTypes('++', ['PLUSPLUS'])
         self.assertTokensTypes('case int', ['CASE', 'INT'])
         self.assertTokensTypes('caseint', ['ID'])
+        self.assertTokensTypes('$dollar cent$', ['ID', 'ID'])
         self.assertTokensTypes('i ^= 1;', ['ID', 'XOREQUAL', 'INT_CONST_DEC', 'SEMI'])
 
     def test_id_typeid(self):
@@ -54,14 +62,20 @@ class TestCLexerNoErrors(unittest.TestCase):
     def test_integer_constants(self):
         self.assertTokensTypes('12', ['INT_CONST_DEC'])
         self.assertTokensTypes('12u', ['INT_CONST_DEC'])
+        self.assertTokensTypes('12l', ['INT_CONST_DEC'])
         self.assertTokensTypes('199872Ul', ['INT_CONST_DEC'])
+        self.assertTokensTypes('199872lU', ['INT_CONST_DEC'])
         self.assertTokensTypes('199872LL', ['INT_CONST_DEC'])
         self.assertTokensTypes('199872ull', ['INT_CONST_DEC'])
+        self.assertTokensTypes('199872llu', ['INT_CONST_DEC'])
+        self.assertTokensTypes('1009843200000uLL', ['INT_CONST_DEC'])
+        self.assertTokensTypes('1009843200000LLu', ['INT_CONST_DEC'])
 
         self.assertTokensTypes('077', ['INT_CONST_OCT'])
         self.assertTokensTypes('0123456L', ['INT_CONST_OCT'])
 
         self.assertTokensTypes('0xf7', ['INT_CONST_HEX'])
+        self.assertTokensTypes('0b110', ['INT_CONST_BIN'])
         self.assertTokensTypes('0x01202AAbbf7Ul', ['INT_CONST_HEX'])
 
         # no 0 before x, so ID catches it
@@ -69,6 +83,9 @@ class TestCLexerNoErrors(unittest.TestCase):
 
         # - is MINUS, the rest a constnant
         self.assertTokensTypes('-1', ['MINUS', 'INT_CONST_DEC'])
+
+    def test_special_names(self):
+        self.assertTokensTypes('sizeof offsetof', ['SIZEOF', 'OFFSETOF'])
 
     def test_floating_constants(self):
         self.assertTokensTypes('1.5f', ['FLOAT_CONST'])
@@ -104,6 +121,19 @@ class TestCLexerNoErrors(unittest.TestCase):
         self.assertTokensTypes(r"""'\x2f12'""", ['CHAR_CONST'])
         self.assertTokensTypes(r"""L'\xaf'""", ['WCHAR_CONST'])
 
+    def test_on_rbrace_lbrace(self):
+        braces = []
+        def on_lbrace():
+            braces.append('{')
+        def on_rbrace():
+            braces.append('}')
+        clex = CLexer(self.error_func, on_lbrace, on_rbrace,
+                      self.type_lookup_func)
+        clex.build(optimize=False)
+        clex.input('hello { there } } and again }}{')
+        token_list(clex)
+        self.assertEqual(braces, ['{', '}', '}', '}', '}', '{'])
+
     def test_string_literal(self):
         self.assertTokensTypes('"a string"', ['STRING_LITERAL'])
         self.assertTokensTypes('L"ing"', ['WSTRING_LITERAL'])
@@ -115,6 +145,9 @@ class TestCLexerNoErrors(unittest.TestCase):
             ['STRING_LITERAL'])
         self.assertTokensTypes(
             r'''"hello 'joe' wanna give it a \"go\"?"''',
+            ['STRING_LITERAL'])
+        self.assertTokensTypes(
+            '"\123\123\123\123\123\123\123\123\123\123\123\123\123\123\123\123"',
             ['STRING_LITERAL'])
 
     def test_mess(self):
@@ -279,27 +312,52 @@ class TestCLexerNoErrors(unittest.TestCase):
 
 
     def test_preprocessor_pragma(self):
-        str = r'''
+        str = '''
         42
+        #pragma
         #pragma helo me
         #pragma once
         # pragma omp parallel private(th_id)
-        #pragma {pack: 2, smack: 3}
+        #\tpragma {pack: 2, smack: 3}
         #pragma <includeme.h> "nowit.h"
         #pragma "string"
+        #pragma somestring="some_other_string"
         #pragma id 124124 and numbers 0235495
         59
         '''
-
-        # Check that pragmas are ignored but the line number advances
+        # Check that pragmas are tokenized, including trailing string
         self.clex.input(str)
         self.clex.reset_lineno()
 
         t1 = self.clex.token()
         self.assertEqual(t1.type, 'INT_CONST_DEC')
+
         t2 = self.clex.token()
-        self.assertEqual(t2.type, 'INT_CONST_DEC')
-        self.assertEqual(t2.lineno, 10)
+        self.assertEqual(t2.type, 'PPPRAGMA')
+
+        t3 = self.clex.token()
+        self.assertEqual(t3.type, 'PPPRAGMA')
+
+        t4 = self.clex.token()
+        self.assertEqual(t4.type, 'PPPRAGMASTR')
+        self.assertEqual(t4.value, 'helo me')
+
+        for i in range(3):
+            t = self.clex.token()
+
+        t5 = self.clex.token()
+        self.assertEqual(t5.type, 'PPPRAGMASTR')
+        self.assertEqual(t5.value, 'omp parallel private(th_id)')
+
+        for i in range(5):
+            ta = self.clex.token()
+            self.assertEqual(ta.type, 'PPPRAGMA')
+            tb = self.clex.token()
+            self.assertEqual(tb.type, 'PPPRAGMASTR')
+
+        t6 = self.clex.token()
+        self.assertEqual(t6.type, 'INT_CONST_DEC')
+        self.assertEqual(t6.lineno, 12)
 
 
 
@@ -325,11 +383,18 @@ class TestCLexerErrors(unittest.TestCase):
     def error_func(self, msg, line, column):
         self.error = msg
 
+    def on_lbrace_func(self):
+        pass
+
+    def on_rbrace_func(self):
+        pass
+
     def type_lookup_func(self, typ):
         return False
 
     def setUp(self):
-        self.clex = CLexer(self.error_func, self.type_lookup_func)
+        self.clex = CLexer(self.error_func, self.on_lbrace_func,
+                self.on_rbrace_func, self.type_lookup_func)
         self.clex.build(optimize=False)
         self.error = ""
 
@@ -353,7 +418,6 @@ class TestCLexerErrors(unittest.TestCase):
 
     def test_trivial_tokens(self):
         self.assertLexerError('@', ERR_ILLEGAL_CHAR)
-        self.assertLexerError('$', ERR_ILLEGAL_CHAR)
         self.assertLexerError('`', ERR_ILLEGAL_CHAR)
         self.assertLexerError('\\', ERR_ILLEGAL_CHAR)
 
@@ -381,5 +445,3 @@ class TestCLexerErrors(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-

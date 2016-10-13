@@ -1,33 +1,23 @@
 Todo
 ----
 
-
-Changes since last
-------------------
-
-* <write directly in CHANGES!>
-
 Version Update
 --------------
 
-setup.py, __init__.py, README.txt, CHANGES
-- Make sure _build_tables was run in pycparser/ and the tables are in the
-  MANIFEST
-- Tag in hg
+setup.py, __init__.py, README, CHANGES
+- Make sure _build_tables was run in pycparser/
+- Tag in git. When pushing to GitHub, git push --tags
 - If PLY version changes, note it in README and ply/LICENSE
+- Run tox tests
 
-
-Build docs and distribution
----------------------------
-
-No need to build the doc now, README is rendered by Bitbucket
 python setup.py sdist upload
 
 Misc
 ----
 
 yacc optimization: 
-- If parsetab.py/pyc doesn't exist in the path, the table will be reconstructed anyway, regardless of the optimize parameter
+- If parsetab.py/pyc doesn't exist in the path, the table will be reconstructed
+  anyway, regardless of the optimize parameter
 - If it does exist:
   - If optimize=True, the table will be loaded unconditionally
   - If optimize=False, the table will be loaded only if it's older than the grammar
@@ -37,5 +27,3 @@ lex optimization:
 - If optimize=True:
   - If lextab.py/pyc exists in the path, it will be loaded unconditionally
   - If lextab.py/pyc doesn't exist, it will be created and loaded
-
-
