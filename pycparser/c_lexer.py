@@ -74,8 +74,29 @@ class CLexer(object):
         self.lexer.input(text)
 
     def token(self):
-        self.last_token = self.lexer.token()
+        lexer = self.lexer
+        self.last_token = tok = lexer.token()
+        if tok:
+            # add endlexpos and endlineno to each token, useful for more precise tracking
+            tok.endlineno = lexer.lineno
+            tok.endlexpos = lexer.lexpos
         return self.last_token
+
+    @property
+    def lineno(self):
+        try:
+            lexer = self.lexer
+        except AttributeError:
+            return None
+        return lexer.lineno
+
+    @property
+    def lexpos(self):
+        try:
+            lexer = self.lexer
+        except AttributeError:
+            return None
+        return lexer.lexpos
 
     def find_tok_column(self, token):
         """ Find the column of the token in its line.

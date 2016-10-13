@@ -51,5 +51,9 @@ class PLYParser(object):
                 line=lineno,
                 column=column)
 
+    def _yacccoord(self, yaccprod, tokenidx):
+        """ Determine coordinates of a production token from within a yacc production rule. """
+        return self._coord(yaccprod.lineno(tokenidx))
+
     def _parse_error(self, msg, coord):
         raise ParseError("%s: %s" % (coord, msg))
