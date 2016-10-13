@@ -14,16 +14,19 @@ class Coord(object):
             - File name
             - Line number
             - (optional) column number, for the Lexer
+            - (optional) pair of character indices encompassing all tokens of the node
     """
-    __slots__ = ('file', 'line', 'column', '__weakref__')
-    def __init__(self, file, line, column=None):
+    __slots__ = ('file', 'line', 'column', 'span', '__weakref__')
+    def __init__(self, file, line, column=None, span=None):
         self.file = file
         self.line = line
         self.column = column
+        self.span = span
 
     def __str__(self):
         str = "%s:%s" % (self.file, self.line)
         if self.column: str += ":%s" % self.column
+        if self.span: str += " [%d:%d)" % self.span
         return str
 
 
@@ -51,9 +54,24 @@ class PLYParser(object):
                 line=lineno,
                 column=column)
 
-    def _yacccoord(self, yaccprod, tokenidx):
+    def _yacccoord(self, yaccprod, tokenidx, spantokidx=None):
         """ Determine coordinates of a production token from within a yacc production rule. """
-        return self._coord(yaccprod.lineno(tokenidx))
+        return Coord(
+            file=self.clex.filename,
+            line=yaccprod.lineno(tokenidx),
+            span=yaccprod.lexspan(tokenidx if spantokidx is None else spantokidx))
+
+    def _combinecoords(self, coords, mainidx=0):
+        main = coords[mainidx]
+        spans = [c.span for c in coords if c.span is not None]
+        return Coord(
+            file=main.file,
+            line=main.line,
+            span=(min(s[0] for s in spans),max(s[1] for s in spans)) if spans else None)
+
+    def _fullspan(self, coord, yaccprod):
+        fullspan = Coord('',0,span=yaccprod.lexspan(0))
+        return self._combinecoords([coord,fullspan])
 
     def _parse_error(self, msg, coord):
         raise ParseError("%s: %s" % (coord, msg))

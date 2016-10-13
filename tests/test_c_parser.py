@@ -80,8 +80,8 @@ def expand_init(init):
 
 
 class TestCParser_base(unittest.TestCase):
-    def parse(self, txt, filename=''):
-        return self.cparser.parse(txt, filename)
+    def parse(self, txt, filename='', **kw):
+        return self.cparser.parse(txt, filename, **kw)
 
     def setUp(self):
         self.cparser = _c_parser
@@ -212,6 +212,13 @@ class TestCParser_fundamentals(TestCParser_base):
         }"""
         f6 = self.parse(t6, filename='z.c')
         self.assert_coord(self.parse(t6).ext[0].decl.type.args.params[1], 3)
+
+    def test_coord_span(self):
+        t1 = """int a;"""
+        f1 = self.parse(t1,filename='test.c',tracking=True)
+        d = f1.ext[0]
+        self.assertEqual(d.type.type.coord.span, (0,3))
+        self.assertEqual(d.coord.span, (4,5))  # or would we expect (0,5)?
 
     def test_forloop_coord(self):
         t = '''\

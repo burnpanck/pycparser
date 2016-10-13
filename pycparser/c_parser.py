@@ -128,7 +128,7 @@ class CParser(PLYParser):
         # Keeps track of the last token given to yacc (the lookahead token)
         self._last_yielded_token = None
 
-    def parse(self, text, filename='', debuglevel=0):
+    def parse(self, text, filename='', debuglevel=0, tracking=False):
         """ Parses C code and returns an AST.
 
             text:
@@ -140,6 +140,9 @@ class CParser(PLYParser):
 
             debuglevel:
                 Debug level to yacc
+
+            tracking:
+                Enable the computation of exact character spans for each AST coord
         """
         self.clex.filename = filename
         self.clex.reset_lineno()
@@ -148,7 +151,8 @@ class CParser(PLYParser):
         return self.cparser.parse(
                 input=text,
                 lexer=self.clex,
-                debug=debuglevel)
+                debug=debuglevel,
+                tracking=tracking)
 
     ######################--   PRIVATE   --######################
 
@@ -344,7 +348,7 @@ class CParser(PLYParser):
             #
             type.type = c_ast.IdentifierType(
                 [name for id in typename for name in id.names],
-                coord=typename[0].coord)
+                coord=self._combinecoords([id.coord for id in typename],0))
         return decl
 
     def _add_declaration_specifier(self, declspec, newspec, kind):
@@ -453,7 +457,7 @@ class CParser(PLYParser):
 
         return declarations
 
-    def _build_function_definition(self, spec, decl, param_decls, body):
+    def _build_function_definition(self, spec, decl, param_decls, body, coord):
         """ Builds a function definition.
         """
         assert 'typedef' not in spec['storage']
@@ -467,7 +471,7 @@ class CParser(PLYParser):
             decl=declaration,
             param_decls=param_decls,
             body=body,
-            coord=decl.coord)
+            coord=coord)
 
     def _select_struct_union_class(self, token):
         """ Given a token (either STRUCT or UNION), selects the
@@ -562,9 +566,9 @@ class CParser(PLYParser):
                                     | PPPRAGMA PPPRAGMASTR
         """
         if len(p) == 3:
-            p[0] = c_ast.Pragma(p[2], self._yacccoord(p,2))
+            p[0] = c_ast.Pragma(p[2], self._yacccoord(p,2,0))
         else:
-            p[0] = c_ast.Pragma("", self._yacccoord(p,1))
+            p[0] = c_ast.Pragma("", self._yacccoord(p,1,0))
 
     # In function definitions, the declarator can be followed by
     # a declaration list, for old "K&R style" function definitios.
@@ -573,18 +577,21 @@ class CParser(PLYParser):
         """ function_definition : declarator declaration_list_opt compound_statement
         """
         # no declaration specifiers - 'int' becomes the default type
+        typecoord = self._yacccoord(p,1,1)
+        typecoord.span = (typecoord.span[0],typecoord.span[0])
         spec = dict(
             qual=[],
             storage=[],
             type=[c_ast.IdentifierType(['int'],
-                                       coord=self._yacccoord(p,1))],
+                                       coord=typecoord)],
             function=[])
 
         p[0] = self._build_function_definition(
             spec=spec,
             decl=p[1],
             param_decls=p[2],
-            body=p[3])
+            body=p[3],
+            coord=self._fullspan(p[1].coord,p))
 
     def p_function_definition_2(self, p):
         """ function_definition : declaration_specifiers declarator declaration_list_opt compound_statement
@@ -595,7 +602,8 @@ class CParser(PLYParser):
             spec=spec,
             decl=p[2],
             param_decls=p[3],
-            body=p[4])
+            body=p[4],
+            coord = self._fullspan(p[2].coord,p))
 
     def p_statement(self, p):
         """ statement   : labeled_statement
